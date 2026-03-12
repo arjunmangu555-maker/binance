@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Binance Futures Scanner</title>
+<script src="https://s3.tradingview.com/tv.js"></script>
+
+<style>
+body{margin:0;font-family:Arial;}
+.container{display:flex;height:100vh;}
+
+.left{
+width:12%;
+border-right:2px solid #008571;
+overflow:auto;
+}
+
+.right{
+width:88%;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+thead{
+position:sticky;
+top:0;
+background:#008571;
+color:white;
+}
+
+th,td{
+padding:6px;
+border-bottom:1px solid #008571;
+font-size:12px;
+text-align:center;
+}
+
+tbody tr:hover{
+background:#FCE3E3;
+cursor:pointer;
+}
+
+.selected{
+background:#ffe08a !important;
+}
+
+#status{
+padding:6px;
+font-size:12px;
+background:#008571;
+color:white;
+display:flex;
+justify-content:space-between;
+}
+
+#themeBtn{
+font-size:10px;
+padding:2px 6px;
+cursor:pointer;
+border:none;
+border-radius:3px;
+}
+
+#contextMenu{
+position:absolute;
+display:none;
+background:white;
+border:1px solid #ccc;
+box-shadow:0 2px 6px rgba(0,0,0,0.2);
+font-size:12px;
+z-index:1000;
+}
+
+#contextMenu div{
+padding:6px;
+cursor:pointer;
+}
+
+#contextMenu div:hover{
+background:#f0f0f0;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="left">
+
+<div id="status">
+<span id="updateText">Loading...</span>
+<button id="themeBtn" onclick="toggleTheme()">Theme</button>
+</div>
+
+<table>
+<thead>
+<tr>
+<th onclick="sortTable('symbol')">Name</th>
+<th onclick="sortTable('change')">Price %</th>
+<th onclick="sortTable('rvol')">RVOL</th>
+</tr>
+</thead>
+
+<tbody id="body"></tbody>
+</table>
+
+</div>
+
+<div class="right">
+<div id="chart" style="height:100%;width:100%;"></div>
+</div>
+
+</div>
+
+<div id="contextMenu">
+<div id="openTVOption">Open in TradingView</div>
+<div id="copyOption">Copy Symbol</div>
+</div>
+
+<script>
+
+let symbols=[];
+let dataList=[];
+let widget=null;
+
+let selectedSymbol=null;
+let selectedIndex=-1;
+
+let contextSymbol=null;
+let currentTheme="light";
+
+let sortDirection={
+symbol:1,
+change:-1,
+rvol:-1
+};
+
+/* FETCH FUTURES SYMBOLS */
+
+async function fetchSymbols(){
+
+const res=await fetch("https://fapi.binance.com/fapi/v1/exchangeInfo");
+const data=await res.json();
+
+symbols=data.symbols
+.filter(s=>s.contractType==="PERPETUAL" && s.quoteAsset==="USDT")
+.map(s=>s.symbol);
+
+}
+
+/* FAST SCANNER */
+
+async function scan(){
+
+document.getElementById("updateText").innerText="Scanning...";
+
+dataList=[];
+
+/* ALL PRICE CHANGES */
+
+let priceRes=await fetch("https://fapi.binance.com/fapi/v1/ticker/24hr");
+let priceData=await priceRes.json();
+
+let priceMap={};
+
+priceData.forEach(p=>{
+priceMap[p.symbol]=parseFloat(p.priceChangePercent);
+});
+
+/* RVOL PARALLEL SCAN */
+
+let promises=symbols.map(async s=>{
+
+try{
+
+const res=await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=15m&limit=23`);
+const data=await res.json();
+
+if(!Array.isArray(data)) return;
+
+let vols=data.map(x=>parseFloat(x[5]));
+
+let current=vols[22];
+let avg=vols.slice(2,22).reduce((a,b)=>a+b,0)/20;
+
+if(!avg || avg===0) return;
+
+let rvol=current/avg;
+
+if(!isFinite(rvol)) return;
+
+dataList.push({
+symbol:s,
+change:priceMap[s] ?? 0,
+rvol:rvol
+});
+
+}catch{}
+
+});
+
+await Promise.all(promises);
+
+render();
+
+document.getElementById("updateText").innerText="Scan Complete";
+
+}
+
+/* RENDER TABLE */
+
+function render(){
+
+const tbody=document.getElementById("body");
+tbody.innerHTML="";
+
+dataList.forEach((item,index)=>{
+
+let row=document.createElement("tr");
+
+if(selectedIndex===index)
+row.classList.add("selected");
+
+row.innerHTML=`
+<td>${item.symbol}</td>
+<td>${item.change.toFixed(2)}</td>
+<td>${item.rvol.toFixed(2)}</td>
+`;
+
+row.onclick=()=>{
+
+selectedIndex=index;
+selectedSymbol=item.symbol;
+
+changeChartSymbol(item.symbol);
+
+render();
+
+};
+
+row.oncontextmenu=(e)=>{
+
+e.preventDefault();
+
+contextSymbol=item.symbol;
+
+const menu=document.getElementById("contextMenu");
+
+menu.style.display="block";
+menu.style.left=e.pageX+"px";
+menu.style.top=e.pageY+"px";
+
+};
+
+tbody.appendChild(row);
+
+});
+
+}
+
+/* SORTING */
+
+function sortTable(type){
+
+sortDirection[type]*=-1;
+
+dataList.sort((a,b)=>{
+
+if(type==="symbol"){
+return a.symbol.localeCompare(b.symbol)*sortDirection[type];
+}
+
+return (a[type]-b[type])*sortDirection[type];
+
+});
+
+render();
+
+}
+
+/* KEYBOARD NAVIGATION */
+
+document.addEventListener("keydown",(e)=>{
+
+if(dataList.length===0) return;
+
+if(e.key==="ArrowDown"){
+
+selectedIndex++;
+
+if(selectedIndex>=dataList.length)
+selectedIndex=dataList.length-1;
+
+let s=dataList[selectedIndex].symbol;
+
+selectedSymbol=s;
+
+changeChartSymbol(s);
+
+render();
+
+}
+
+if(e.key==="ArrowUp"){
+
+selectedIndex--;
+
+if(selectedIndex<0)
+selectedIndex=0;
+
+let s=dataList[selectedIndex].symbol;
+
+selectedSymbol=s;
+
+changeChartSymbol(s);
+
+render();
+
+}
+
+});
+
+/* RIGHT CLICK MENU */
+
+document.getElementById("openTVOption").onclick=()=>{
+
+if(contextSymbol){
+
+const url="https://in.tradingview.com/chart/?symbol=BINANCE:"+contextSymbol+".P";
+
+window.open(url,"_blank");
+
+}
+
+hideMenu();
+
+};
+
+document.getElementById("copyOption").onclick=()=>{
+
+if(contextSymbol){
+navigator.clipboard.writeText(contextSymbol);
+}
+
+hideMenu();
+
+};
+
+function hideMenu(){
+document.getElementById("contextMenu").style.display="none";
+}
+
+document.addEventListener("click",hideMenu);
+
+/* TRADINGVIEW CHART */
+
+function initChart(){
+
+widget=new TradingView.widget({
+container_id:"chart",
+symbol:"BINANCE:BTCUSDT.P",
+interval:"5",
+autosize:true,
+theme:currentTheme,
+style:"1",
+locale:"en",
+timezone:"Asia/Kolkata",
+toolbar_bg:"#f1f3f6",
+enable_publishing:false,
+save_image:true,
+
+allow_symbol_change:true,
+hide_side_toolbar:false,
+withdateranges:false,
+details:false,
+hotlist:false,
+calendar:false,
+
+studies:["Volume@tv-basicstudies"],
+studies_overrides:{
+"volume.volume.transparency":0
+}
+
+});
+
+}
+
+function changeChartSymbol(symbol){
+
+document.getElementById("chart").innerHTML="";
+
+widget=new TradingView.widget({
+
+container_id:"chart",
+symbol:"BINANCE:"+symbol+".P",
+interval:"5",
+autosize:true,
+theme:currentTheme,
+style:"1",
+locale:"en",
+timezone:"Asia/Kolkata",
+toolbar_bg:"#f1f3f6",
+enable_publishing:false,
+save_image:true,
+
+allow_symbol_change:true,
+hide_side_toolbar:false,
+withdateranges:false,
+details:false,
+hotlist:false,
+calendar:false,
+
+studies:["Volume@tv-basicstudies"],
+studies_overrides:{
+"volume.volume.transparency":0
+}
+
+});
+
+}
+
+/* THEME */
+
+function toggleTheme(){
+
+currentTheme=currentTheme==="light"?"dark":"light";
+
+if(selectedSymbol)
+changeChartSymbol(selectedSymbol);
+else
+changeChartSymbol("BTCUSDT");
+
+}
+
+/* INIT */
+
+async function init(){
+
+await fetchSymbols();
+
+initChart();
+
+await scan();
+
+}
+
+init();
+
+</script>
+
+</body>
+</html>

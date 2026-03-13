@@ -393,6 +393,10 @@ studies_overrides:{
 
 function changeChartSymbol(symbol){
 
+if(widget){
+widget.remove();
+}
+
 document.getElementById("chart").innerHTML="";
 
 widget=new TradingView.widget({

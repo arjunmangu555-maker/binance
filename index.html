@@ -11,30 +11,25 @@ body{margin:0;font-family:Arial;}
 .container{display:flex;height:100vh;}
 
 .left{
-width:12%;
+width:14%;
 border-right:2px solid #008571;
-display:flex;
-flex-direction:column;
+overflow:auto;
 }
 
 .right{
-width:88%;
+width:86%;
 }
 
 table{
 width:100%;
 border-collapse:collapse;
-display:block;
-overflow:auto;
-flex:1;
 }
 
 thead{
 position:sticky;
-top:0px;
+top:0;
 background:#008571;
 color:white;
-z-index:5;
 }
 
 th,td{
@@ -59,11 +54,9 @@ font-size:12px;
 background:#008571;
 color:white;
 display:flex;
+align-items:center;
 justify-content:space-between;
-
-position:sticky;
-top:0;
-z-index:10;
+gap:4px;
 }
 
 #themeBtn{
@@ -73,6 +66,14 @@ cursor:pointer;
 border:none;
 border-radius:3px;
 }
+
+#tfSelect{
+font-size:10px;
+padding:2px 4px;
+border-radius:3px;
+cursor:pointer;
+}
+
 
 #contextMenu{
 position:absolute;
@@ -103,8 +104,26 @@ background:#f0f0f0;
 <div class="left">
 
 <div id="status">
+
 <span id="updateText">Loading...</span>
+
+<div style="display:flex;gap:4px;align-items:center;">
+
 <button id="themeBtn" onclick="toggleTheme()">Theme</button>
+
+<select id="tfSelect" onchange="changeTimeframe()">
+<option value="1">1m</option>
+<option value="3">3m</option>
+<option value="5">5m</option>
+<option value="15">15m</option>
+<option value="30">30m</option>
+<option value="60">1h</option>
+<option value="240">4h</option>
+<option value="D">1D</option>
+</select>
+
+</div>
+
 </div>
 
 <table>
@@ -143,6 +162,7 @@ let selectedIndex=-1;
 
 let contextSymbol=null;
 let currentTheme="light";
+let currentInterval=localStorage.getItem("scanner_tf") || "5";
 
 let sortDirection={
 symbol:1,
@@ -167,7 +187,7 @@ symbols=data.symbols
 
 async function scan(){
 
-document.getElementById("updateText").innerText="Scanning...";
+document.getElementById("updateText").innerText="Scanning";
 
 dataList=[];
 
@@ -218,7 +238,7 @@ await Promise.all(promises);
 
 render();
 
-document.getElementById("updateText").innerText="Scan Complete";
+document.getElementById("updateText").innerText="Done";
 
 }
 
@@ -314,10 +334,6 @@ changeChartSymbol(s);
 
 render();
 
-document.querySelectorAll("#body tr")[selectedIndex]?.scrollIntoView({
-block:"center"
-});
-
 }
 
 if(e.key==="ArrowUp"){
@@ -334,10 +350,6 @@ selectedSymbol=s;
 changeChartSymbol(s);
 
 render();
-
-document.querySelectorAll("#body tr")[selectedIndex]?.scrollIntoView({
-block:"center"
-});
 
 }
 
@@ -382,7 +394,7 @@ function initChart(){
 widget=new TradingView.widget({
 container_id:"chart",
 symbol:"BINANCE:BTCUSDT.P",
-interval:"5",
+interval:currentInterval,
 autosize:true,
 theme:currentTheme,
 style:"1",
@@ -420,7 +432,7 @@ widget=new TradingView.widget({
 
 container_id:"chart",
 symbol:"BINANCE:"+symbol+".P",
-interval:"5",
+interval:currentInterval,
 autosize:true,
 theme:currentTheme,
 style:"1",
@@ -459,11 +471,26 @@ changeChartSymbol("BTCUSDT");
 
 }
 
+function changeTimeframe(){
+
+currentInterval=document.getElementById("tfSelect").value;
+
+localStorage.setItem("scanner_tf",currentInterval);
+
+if(selectedSymbol)
+changeChartSymbol(selectedSymbol);
+else
+changeChartSymbol("BTCUSDT");
+
+}
+
 /* INIT */
 
 async function init(){
 
 await fetchSymbols();
+
+document.getElementById("tfSelect").value=currentInterval;
 
 initChart();
 

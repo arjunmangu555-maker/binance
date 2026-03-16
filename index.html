@@ -11,25 +11,30 @@ body{margin:0;font-family:Arial;}
 .container{display:flex;height:100vh;}
 
 .left{
-width:14%;
+width:12%;
 border-right:2px solid #008571;
-overflow:auto;
+display:flex;
+flex-direction:column;
 }
 
 .right{
-width:86%;
+width:84%;
 }
 
 table{
 width:100%;
 border-collapse:collapse;
+display:block;
+overflow:auto;
+flex:1;
 }
 
 thead{
 position:sticky;
-top:0;
+top:28px;
 background:#008571;
 color:white;
+z-index:5;
 }
 
 th,td{
@@ -54,9 +59,11 @@ font-size:12px;
 background:#008571;
 color:white;
 display:flex;
-align-items:center;
 justify-content:space-between;
-gap:4px;
+
+position:sticky;
+top:0;
+z-index:10;
 }
 
 #themeBtn{
@@ -333,6 +340,10 @@ selectedSymbol=s;
 changeChartSymbol(s);
 
 render();
+  
+document.querySelectorAll("#body tr")[selectedIndex]?.scrollIntoView({
+block:"center"
+});
 
 }
 
@@ -350,6 +361,10 @@ selectedSymbol=s;
 changeChartSymbol(s);
 
 render();
+
+document.querySelectorAll("#body tr")[selectedIndex]?.scrollIntoView({
+block:"center"
+});
 
 }
 
